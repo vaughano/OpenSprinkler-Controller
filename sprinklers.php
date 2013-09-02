@@ -204,6 +204,8 @@ if (!is_auth() || !isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_
             <label for="log_graph">Graph</label>
             <input data-mini="true" type="radio" name="log_type" id="log_table" value="table" />
             <label for="log_table">Table</label>
+            <input data-mini="true" type="radio" name="log_type" id="log_timeline" value="timeline" />
+            <label for="log_timeline">Timeline</label>
         </fieldset>
         <div id="placeholder" style="display:none;width:100%;height:300px;"></div>
         <div id="zones">
@@ -230,6 +232,21 @@ if (!is_auth() || !isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_
         </fieldset>
         <div id="logs_list">
         </div>
+        <div id="log_timeline_panel" style="display:none">
+        <div id="log_timeline_header">
+            <a href="#" data-onclick="change_log_timeline_date(-1);"><img src="img/moveleft.png" /></a>
+            <input style="text-align:center" type="date" name="log_timeline_date" id="log_timeline_date" />
+            <a href="#" data-onclick="change_log_timeline_date(1);"><img src="img/moveright.png" /></a>
+        </div>
+        <div id="log_timeline_component"></div>
+        <div id="log_timeline-navigation" style="display:none;width:144px;margin:0 auto">
+            <div class="timeline-navigation-zoom-in" onclick="timeline.zoom(0.4)" title="Zoom in"></div>
+            <div class="timeline-navigation-zoom-out" onclick="timeline.zoom(-0.4)" title="Zoom out"></div>
+            <div class="timeline-navigation-move-left" onclick="timeline.move(-0.2)" title="Move left"></div>
+            <div class="timeline-navigation-move-right" onclick="timeline.move(0.2)" title="Move right"></div>
+        </div>
+        </div>
+        <div></div>
     </div>
 </div>
 

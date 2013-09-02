@@ -259,6 +259,100 @@ function get_programs() {
     return $newdata;
 }
 
+function get_logs_timeline() {
+    process_logs($_REQUEST["m"],$_REQUEST["d"],$_REQUEST["y"]);
+}
+
+function process_logs($month,$day,$year) {
+    $newdata = array();
+
+    $newdata["settings"] = get_settings();
+    $vs = get_stations();
+    $newdata["stations"] = $vs["stations"];
+
+    # TODO: change this to get the the log for the given day
+    $data = get_from_os("/gp?d=".$day."&m=".$month."&y=".$year);
+    preg_match_all("/(seq|mas|wl|sdt|mton|mtoff|devday|devmin|dd|mm|yy|nprogs|nboards|ipas|mnp)=[\w|\d|.\"]+/", $data, $opts);
+
+    foreach ($opts[0] as $variable) {
+        if ($variable === "") continue;
+        $tmp = str_replace('"','',explode("=", $variable));
+        $newdata[$tmp[0]] = $tmp[1];
+    }
+
+    preg_match("/masop=\[(.*?)\]/", $data, $masop);
+    $newdata["masop"] = explode(",",$masop[1]);
+
+    preg_match("/pd=\[\];(.*);/", $data, $progs);
+    $progs = explode(";", $progs[1]);
+
+    $i = 0;
+    foreach ($progs as $prog) {
+        $tmp = explode("=", $prog);
+        $tmp2 = str_replace("[", "", $tmp[1]);
+        $tmp2 = str_replace("]", "", $tmp2);
+        $newdata["programs"][$i] = explode(",",$tmp2);
+        $i++;
+    }
+    
+    $simminutes=0;
+    $simt=strtotime($newdata["mm"]."/".$newdata["dd"]."/".$newdata["yy"]);
+    $simdate=date(DATE_RSS,$simt);
+    $simday = ($simt/3600/24)>>0;
+    $match=array(0,0);
+    $st_array=array($newdata["nboards"]*8);
+    $pid_array=array($newdata["nboards"]*8);
+    $et_array=array($newdata["nboards"]*8);
+    for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
+        $st_array[$sid]=0;$pid_array[$sid]=0;$et_array[$sid]=0;
+    }
+    do {
+        $busy=0;
+        $match_found=0;
+        for($pid=0;$pid<$newdata["nprogs"];$pid++) {
+          $prog=$newdata["programs"][$pid];
+          if(check_match($prog,$simminutes,$simdate,$simday,$newdata)) {
+            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
+              $bid=$sid>>3;$s=$sid%8;
+              if($newdata["mas"]==($sid+1)) continue; // skip master station
+              if($prog[7+$bid]&(1<<$s)) {
+                $et_array[$sid]=$prog[6]*$newdata["wl"]/100>>0;$pid_array[$sid]=$pid+1;
+                $match_found=1;
+              }
+            }
+          }
+        }
+        if($match_found) {
+          $acctime=$simminutes*60;
+          if($newdata["seq"]) {
+            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
+              if($et_array[$sid]) {
+                $st_array[$sid]=$acctime;$acctime+=$et_array[$sid];
+                $et_array[$sid]=$acctime;$acctime+=$newdata["sdt"];
+                $busy=1;
+              }
+            }
+          } else {
+            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
+              if($et_array[$sid]) {
+                $st_array[$sid]=$simminutes*60;
+                $et_array[$sid]=$simminutes*60+$et_array[$sid];
+                $busy=1;
+              }
+            }
+          }
+        }
+        if ($busy) {
+          $endminutes=run_sched($simminutes*60,$st_array,$pid_array,$et_array,$newdata,$simt)/60>>0;
+          if($newdata["seq"]&&$simminutes!=$endminutes) $simminutes=$endminutes;
+          else $simminutes++;
+          for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {$st_array[$sid]=0;$pid_array[$sid]=0;$et_array[$sid]=0;}
+        } else {
+          $simminutes++;
+        }
+    } while($simminutes<24*60);
+}
+
 function get_preview() {
     process_programs($_REQUEST["m"],$_REQUEST["d"],$_REQUEST["y"]);
 }
@@ -400,6 +494,13 @@ function time_to_text($sid,$start,$pid,$end,$data,$simt) {
     $class = "program-".(($pid+3)%4);
     if (($data["settings"]["rd"]!=0)&&($simt+$start+($data["settings"]["tz"]-48)*900<=$data["settings"]["rdst"])) $class="delayed";
     echo "{'start': ".$start.",'end': ".$end.",'className':'".$class."','content':'P".$pid."','group':'".$data["stations"][$sid]."'},";
+}
+
+# TODO: Convert log $data structure to renderable format for timeline
+function log_to_timeline_row($sid, $start, $pid, $end, $data, $simt) {
+	$class = "log-".(($pid+3)%4);
+	if (($data["settings"]["rd"]!=0)&&($simt+$start+($data["settings"]["tz"]-48)*900<=$data["settings"]["rdst"])) $class="delayed";
+	echo "{'start': ".$start.",'end': ".$end.",'className':'".$class."','content':'P".$pid."','group':'".$data["stations"][$sid]."'},";
 }
 
 #Get OpenSprinkler options
@@ -601,8 +702,10 @@ function make_list_logs() {
     global $log_file;
     
     $graphing = isset($_REQUEST["type"]) && $_REQUEST["type"] == "graph";
-
-    if (!$graphing) $list = "<div data-role='collapsible-set' data-inset='true' data-theme='b' data-collapsed-icon='arrow-d' data-expanded-icon='arrow-u'>";
+	$table    = isset($_REQUEST["type"]) && $_REQUEST["type"] == "table";
+	$timeline = isset($_REQUEST["type"]) && $_REQUEST["type"] == "timeline";
+	
+    if (!$graphing && !$timeline) $list = "<div data-role='collapsible-set' data-inset='true' data-theme='b' data-collapsed-icon='arrow-d' data-expanded-icon='arrow-u'>";
     $vs = get_stations();
     $ValveName = $vs["stations"];
     $settings = get_settings();
@@ -720,7 +823,7 @@ function make_list_logs() {
             }
         }
         if (!isset($ValveHistory[$j])) continue;
-        if (!$graphing) {
+        if (!$graphing && !$timeline) {
             $ct=count($ValveHistory[$j]);
             $list .= "<div data-role='collapsible' data-collapsed='true'><h2><div class='ui-btn-up-c ui-btn-corner-all custom-count-pos'>".$ct.(($ct == 1) ? " run" : " runs" )."</div>".$ValveName[$j]."</h2>".$table_header;
         }
@@ -740,7 +843,7 @@ function make_list_logs() {
                 $list .= "<tr><td>".$mins.(($mins == 1) ? " min" : " mins")."</td><td>".date('D, d M Y H:i',$theTime).$ValveHistory[$j][$k][2]."</td></tr>";                    
             }
         };
-        if (!$graphing) $list .= "</tbody></table></div>";
+        if (!$graphing && !$timeline) $list .= "</tbody></table></div>";
     };
     $ValveName[$j] = "Rain Sensor";
     if ($graphing) {
@@ -767,7 +870,7 @@ function make_list_logs() {
         }
     }
     if (isset($RainHistory)) {
-        if (!$graphing) {
+        if (!$graphing && !$timeline) {
             $ct=count($RainHistory);
             $list .= "<div data-role='collapsible' data-collapsed='true'><h2><div class='ui-btn-up-c ui-btn-corner-all custom-count-pos'>".$ct.(($ct == 1) ? " switch" : " switches" )."</div>Rain Sensor</h2>".$table_header;
         }
@@ -787,7 +890,7 @@ function make_list_logs() {
                 $list .= "<tr><td>".$mins.(($mins == 1) ? " min" : " mins")."</td><td>".date('D, d M Y H:i',$theTime).$RainHistory[$k][2]."</td></tr>";
             }
         };
-        if (!$graphing) $list .= "</tbody></table></div>";
+        if (!$graphing && !$timeline) $list .= "</tbody></table></div>";
     }
     $j++; $ValveName[$j] = "Rain Delay";
     if ($graphing) {
@@ -814,7 +917,7 @@ function make_list_logs() {
         }
     }
     if (isset($DelayHistory)) {
-        if (!$graphing) {
+        if (!$graphing && !$timeline) {
             $ct=count($DelayHistory);
             $list .= "<div data-role='collapsible' data-collapsed='true'><h2><div class='ui-btn-up-c ui-btn-corner-all custom-count-pos'>".$ct.(($ct == 1) ? " change" : " changes" )."</div>Rain Delay</h2>".$table_header;
         }
@@ -834,7 +937,7 @@ function make_list_logs() {
                 $list .= "<tr><td>".$mins.(($mins == 1) ? " min" : " mins")."</td><td>".date('D, d M Y H:i',$theTime).$DelayHistory[$k][2]."</td></tr>";
             }
         };
-        if (!$graphing) $list .= "</tbody></table></div>";
+        if (!$graphing && !$timeline) $list .= "</tbody></table></div>";
     }
 
     if ($graphing) {

@@ -49,7 +49,7 @@ $(document).one("pageinit","#sprinklers", function(){
     $("#s-theme-select").val(theme).slider("refresh");
     var now = new Date();
     $("#log_start").val(new Date(now.getTime() - 604800000).toISOString().slice(0,10));
-    $("#preview_date, #log_end").val(now.toISOString().slice(0,10));
+    $("#preview_date, #log_end, #log_timeline_date").val(now.toISOString().slice(0,10));
     $.mobile.changePage($("#sprinklers"),{transition:"none"});
     var curr = $("#commit").data("commit");
     if (curr !== null) {
@@ -87,6 +87,92 @@ $("#preview_date").change(function(){
     var id = $(".ui-page-active").attr("id");
     if (id == "preview") get_preview()
 });
+
+$("#log_timeline_date").change(function(){
+    var id = $(".ui-page-active").attr("id");
+    if (id == "logs") get_logs_timeline();
+});
+
+function get_logs_timeline() {
+	var date = $("#log_timeline_date").val();
+    if (date === "") return;
+    date = date.split("-");
+
+	var options = {
+		'width':  '100%',
+		'editable': false,
+		'axisOnTop': true,
+		'eventMargin': 10,
+		'eventMarginAxis': 0,
+		'min': new Date(date[0],date[1]-1,date[2],0),
+		'max': new Date(date[0],date[1]-1,date[2],24),
+		'selectable': true,
+		'showMajorLabels': false,
+		'zoomMax': 1000 * 60 * 60 * 24,
+		'zoomMin': 1000 * 60 * 60,
+		'groupsChangeable': false,
+		'showNavigation': false
+	};
+	// TODO: Convert logs to JSON data for Timeline widget
+	var data = [{
+            'start': new Date(2013, 8, 2, 4, 0), 
+			'end': new Date(2013, 8, 2, 4, 30),
+			'className':'blue-gauge-3',
+			'content':'56kPa',
+			'group':'Ornamental'},
+		{
+            'start': new Date(2013, 8, 2, 5, 0), 
+			'end': new Date(2013, 8, 2, 5, 30),
+			'className':'blue-gauge-5',
+			'content':'100kPa',
+			'group':'Pears and plums'
+		},
+		{
+            'start': new Date(2013, 8, 2, 5, 45), 
+			'end': new Date(2013, 8, 2, 6, 0),
+			'className':'blue-gauge-2',
+			'content':'40kPa',
+			'group':'Pears and plums'
+		},
+		{
+            'start': new Date(2013, 8, 2, 7, 0), 
+			'end': new Date(2013, 8, 2, 7, 30),
+			'className':'blue-gauge-1',
+			'content':'20kPa',
+			'group':'Pears and plums'
+		},
+		{
+            'start': new Date(2013, 8, 2, 6, 0), 
+			'end': new Date(2013, 8, 2, 6, 30),
+			'className': 'blue-gauge-4',
+			'content':'85kPa',
+			'group':'Apples'
+	}];	
+		
+	window.timeline = new links.Timeline(document.getElementById('log_timeline_component'));
+    // add listeners to widget
+	links.events.addListener(timeline, "select", function(){
+		var row = undefined;
+		var sel = timeline.getSelection();
+		if (sel.length) {
+			if (sel[0].row != undefined) {
+				row = sel[0].row;
+			}
+		}
+		if (row === undefined) return;
+			var content = $(".timeline-event-content")[row];
+			var pid = parseInt($(content).html().substr(1)) - 1;
+			//get_programs(pid);
+		});
+	$(window).on("resize",timeline_redraw);
+	timeline.draw(data, options);
+	if ($(window).width() <= 480) {
+		var currRange = timeline.getVisibleChartRange();
+		if ((currRange.end.getTime() - currRange.start.getTime()) > 6000000) timeline.setVisibleChartRange(currRange.start,new Date(currRange.start.getTime()+6000000))
+	}
+	$("#log_timeline_component .timeline-groups-text:contains('Master')").addClass("skip-numbering")
+	$("#log_timeline-navigation").show()
+}
 
 //Bind changes to the flip switches
 $("select[data-role='slider']").change(function(){
@@ -514,6 +600,19 @@ function get_status() {
     })
 }
 
+function change_log_timeline_date(dir) {
+    var inputBox = $("#log_timeline_date");
+    var date = inputBox.val();
+    if (date === "") return;
+    date = date.split("-");
+    var nDate = new Date(date[0],date[1]-1,date[2]);
+    nDate.setDate(nDate.getDate() + dir);
+    var m = pad(nDate.getMonth()+1);
+    var d = pad(nDate.getDate());
+    inputBox.val(nDate.getFullYear() + "-" + m + "-" + d);
+    $("#log_timeline_date").trigger("change");
+}
+
 function get_logs() {
     $("#logs input").blur();
     $.mobile.showPageLoadingMsg();
@@ -550,6 +649,10 @@ function get_logs() {
                 $("#logs_list").show().html("<p class='center'>No entries found in the selected date range</p>");
             } else {
                 $("#logs_list").empty().hide();
+                $("#log_timeline_panel").hide();
+            	$("#log_timeline_component").hide();
+				$("#log_timeline-navigation").hide();
+				
                 var state = ($(window).height() > 680) ? "expand" : "collapse";
                 setTimeout(function(){$("#log_options").trigger(state)},100);
                 $("#placeholder").show();
@@ -592,7 +695,36 @@ function get_logs() {
         });
         return;
     }
-
+	
+//	'Timeline' radio button is selected
+	if ($('#log_timeline').prop("checked")) {
+		$.get("index.php",parms+"&type=timeline", function(items) {
+        	$("#placeholder").empty().hide();
+        	var list = $("#logs_list");
+        	$("#zones, #graph_sort").hide(); list.show();
+	        if (items.length == 154) {
+    	        $("#log_options").trigger("expand");
+        	    list.html("<p class='center'>Timeline logs are not yet implemented.</p>");
+        	} else {
+        		// No options supported for timeline
+            	$("#log_options").trigger("collapse");
+            	
+            	// hide list
+            	list.empty().hide();
+            	$("#log_timeline_panel").show();
+            	$("#log_timeline_component").show();
+				$("#log_timeline-navigation").show()
+        		
+        		get_logs_timeline();
+    			
+			} // end if (items.length == 154) else case
+           	$.mobile.hidePageLoadingMsg();
+		});
+		return;
+	}
+//	End of Timeline case
+	
+//	Otherwise 'Table' radio button is selected
     $.get("index.php",parms,function(items){
         $("#placeholder").empty().hide();
         var list = $("#logs_list");

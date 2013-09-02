@@ -135,6 +135,21 @@ a {
 #preview_header a {
     padding:10px;
 }
+
+#log_timeline_header .ui-input-text {
+    display: inline-block;
+    width:75%;
+}
+#log_timeline_header {
+    margin: 0 -13px 0 -13px;
+    width:100%;
+    white-space:nowrap;
+    text-align:center
+}
+#log_timeline_header a {
+    padding:10px;
+}
+
 .use_master .ui-btn-inner {
     border-top: 0;
 }
@@ -223,6 +238,23 @@ div.ui-slider-switch {
 .program-3 {
     background-color: rgba(0,200,200,0.5) !important
 }
+
+.blue-gauge-1 {
+	background-color: rgba(0,0,255,0.1) !important
+}
+.blue-gauge-2 {
+	background-color: rgba(0,0,255,0.2) !important
+}
+.blue-gauge-3 {
+	background-color: rgba(0,0,255,0.4) !important
+}
+.blue-gauge-4 {
+	background-color: rgba(0,0,255,0.7) !important
+}
+.blue-gauge-5 {
+	background-color: rgba(0,0,255,1.0) !important
+}
+
 .delayed {
     background-color: #C96161 !important;
     text-decoration: line-through;
@@ -285,8 +317,8 @@ div.timeline-frame {
     -moz-border-radius: 5px; /* For Firefox 3.6 and older */
 }
 div.timeline-axis {
-    border-color: #16a085;
-    background-color: #16a085;
+    border-color: #3373a5;
+    background-color: #3373a5;
 }
 div.timeline-axis-grid {
 }
