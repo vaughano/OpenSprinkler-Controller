@@ -240,10 +240,10 @@ if (!is_auth() || !isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_
         </div>
         <div id="log_timeline_component"></div>
         <div id="log_timeline-navigation" style="display:none;width:144px;margin:0 auto">
-            <div class="timeline-navigation-zoom-in" onclick="timeline.zoom(0.4)" title="Zoom in"></div>
-            <div class="timeline-navigation-zoom-out" onclick="timeline.zoom(-0.4)" title="Zoom out"></div>
-            <div class="timeline-navigation-move-left" onclick="timeline.move(-0.2)" title="Move left"></div>
-            <div class="timeline-navigation-move-right" onclick="timeline.move(0.2)" title="Move right"></div>
+            <div class="timeline-navigation-zoom-in" onclick="log_timeline.zoom(0.4)" title="Zoom in"></div>
+            <div class="timeline-navigation-zoom-out" onclick="log_timeline.zoom(-0.4)" title="Zoom out"></div>
+            <div class="timeline-navigation-move-left" onclick="log_timeline.move(-0.2)" title="Move left"></div>
+            <div class="timeline-navigation-move-right" onclick="log_timeline.move(0.2)" title="Move right"></div>
         </div>
         </div>
         <div></div>

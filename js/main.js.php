@@ -113,65 +113,54 @@ function get_logs_timeline() {
 		'groupsChangeable': false,
 		'showNavigation': false
 	};
-	// TODO: Convert logs to JSON data for Timeline widget
-	var data = [{
-            'start': new Date(2013, 8, 2, 4, 0), 
-			'end': new Date(2013, 8, 2, 4, 30),
-			'className':'blue-gauge-3',
-			'content':'56kPa',
-			'group':'Ornamental'},
-		{
-            'start': new Date(2013, 8, 2, 5, 0), 
-			'end': new Date(2013, 8, 2, 5, 30),
-			'className':'blue-gauge-5',
-			'content':'100kPa',
-			'group':'Pears and plums'
-		},
-		{
-            'start': new Date(2013, 8, 2, 5, 45), 
-			'end': new Date(2013, 8, 2, 6, 0),
-			'className':'blue-gauge-2',
-			'content':'40kPa',
-			'group':'Pears and plums'
-		},
-		{
-            'start': new Date(2013, 8, 2, 7, 0), 
-			'end': new Date(2013, 8, 2, 7, 30),
-			'className':'blue-gauge-1',
-			'content':'20kPa',
-			'group':'Pears and plums'
-		},
-		{
-            'start': new Date(2013, 8, 2, 6, 0), 
-			'end': new Date(2013, 8, 2, 6, 30),
-			'className': 'blue-gauge-4',
-			'content':'85kPa',
-			'group':'Apples'
-	}];	
-		
-	window.timeline = new links.Timeline(document.getElementById('log_timeline_component'));
-    // add listeners to widget
-	links.events.addListener(timeline, "select", function(){
-		var row = undefined;
-		var sel = timeline.getSelection();
-		if (sel.length) {
-			if (sel[0].row != undefined) {
-				row = sel[0].row;
+	$.get("index.php","action=make_logs_with_details&d="+date[2]+"&m="+date[1]+"&y="+date[0], function(logEntries) {
+		var empty = true;
+        if (logEntries == "") {
+        	// TODO: handle this case
+        	$("#log_timeline_component").html("<p>Cannot fetch</p>");
+        } else {
+            empty = false
+            var data = eval(logEntries);
+            // Iterate over array, convert each object to that needed for Timeline component
+            $.each(data, function() {
+                this.start = new Date(this.startTime);
+                this.end = new Date(this.endTime);
+                this.className = mappedLogTimelineBarClass(this.avgPressureKPa);
+                this.content = "" + this.avgPressureKPa + "KPa"; 
+                this.group = this.stationName;
+            })
+            
+			window.log_timeline = new links.Timeline(document.getElementById('log_timeline_component'));
+    		// add listeners to widget
+			links.events.addListener(log_timeline, "select", function() {
+				var row = undefined;
+				var sel = log_timeline.getSelection();
+				if (sel.length) {
+					if (sel[0].row != undefined) {
+						row = sel[0].row;
+					}
+				}
+				if (row === undefined) return;
+				var content = $(".timeline-event-content")[row];
+				var pid = parseInt($(content).html().substr(1)) - 1;
+				//get_programs(pid);
+			});
+	
+			$(window).on("resize",function () {window.log_timeline.redraw()});
+			log_timeline.draw(data, options);
+			if ($(window).width() <= 480) {
+				var currRange = log_timeline.getVisibleChartRange();
+				if ((currRange.end.getTime() - currRange.start.getTime()) > 6000000) log_timeline.setVisibleChartRange(currRange.start,new Date(currRange.start.getTime()+6000000))
 			}
+			$("#log_timeline_component .timeline-groups-text:contains('Master')").addClass("skip-numbering")
+			$("#log_timeline-navigation").show()
 		}
-		if (row === undefined) return;
-			var content = $(".timeline-event-content")[row];
-			var pid = parseInt($(content).html().substr(1)) - 1;
-			//get_programs(pid);
-		});
-	$(window).on("resize",timeline_redraw);
-	timeline.draw(data, options);
-	if ($(window).width() <= 480) {
-		var currRange = timeline.getVisibleChartRange();
-		if ((currRange.end.getTime() - currRange.start.getTime()) > 6000000) timeline.setVisibleChartRange(currRange.start,new Date(currRange.start.getTime()+6000000))
-	}
-	$("#log_timeline_component .timeline-groups-text:contains('Master')").addClass("skip-numbering")
-	$("#log_timeline-navigation").show()
+	});
+	
+}
+
+function mappedLogTimelineBarClass(pressure) {
+	return 'blue-gauge-3';
 }
 
 //Bind changes to the flip switches
@@ -725,8 +714,13 @@ function get_logs() {
 //	End of Timeline case
 	
 //	Otherwise 'Table' radio button is selected
-    $.get("index.php",parms,function(items){
+    $.get("index.php",parms,function(items) {
+    	// hide non-table display components
         $("#placeholder").empty().hide();
+        $("#log_timeline_panel").hide();
+        $("#log_timeline_component").hide();
+		$("#log_timeline-navigation").hide();
+		
         var list = $("#logs_list");
         $("#zones, #graph_sort").hide(); list.show();
         if (items.length == 154) {

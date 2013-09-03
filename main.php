@@ -57,7 +57,7 @@ if (isset($_SERVER['SERVER_NAME'])) $base_url = (($force_ssl) ? "https://" : "ht
 if (isset($_REQUEST['action'])) {
 	if (is_callable($_REQUEST['action'])) {
 		if (($_REQUEST['action'] == "gettoken" || $_REQUEST['action'] == "checktoken" || $_REQUEST['action'] == "login") || is_auth()) {
-            if (in_array($_REQUEST["action"], array("clear_logs","change_user","add_user","delete_user","make_user_list","auto_mm_on","auto_mm_off","current_status","submit_stations","make_stations_list","get_autodelay","submit_autodelay","get_weather","make_list_logs","gettoken","checktoken","login","runonce","send_en_mm","make_settings_list","make_list_status","make_list_manual","fresh_program","make_all_programs","make_runonce","spoff","spon","mm_off","mm_on","en_on","en_off","rbt","rsn","raindelay","submit_options","delete_program","update_program","get_preview","import_config","export_config"))) {
+            if (in_array($_REQUEST["action"], array("clear_logs","change_user","add_user","delete_user","make_user_list","auto_mm_on","auto_mm_off","current_status","submit_stations","make_stations_list","get_autodelay","submit_autodelay","get_weather","make_list_logs","make_logs_with_details","gettoken","checktoken","login","runonce","send_en_mm","make_settings_list","make_list_status","make_list_manual","fresh_program","make_all_programs","make_runonce","spoff","spon","mm_off","mm_on","en_on","en_off","rbt","rsn","raindelay","submit_options","delete_program","update_program","get_preview","import_config","export_config"))) {
     			call_user_func($_REQUEST['action']);
             }
 		} else {
@@ -259,100 +259,6 @@ function get_programs() {
     return $newdata;
 }
 
-function get_logs_timeline() {
-    process_logs($_REQUEST["m"],$_REQUEST["d"],$_REQUEST["y"]);
-}
-
-function process_logs($month,$day,$year) {
-    $newdata = array();
-
-    $newdata["settings"] = get_settings();
-    $vs = get_stations();
-    $newdata["stations"] = $vs["stations"];
-
-    # TODO: change this to get the the log for the given day
-    $data = get_from_os("/gp?d=".$day."&m=".$month."&y=".$year);
-    preg_match_all("/(seq|mas|wl|sdt|mton|mtoff|devday|devmin|dd|mm|yy|nprogs|nboards|ipas|mnp)=[\w|\d|.\"]+/", $data, $opts);
-
-    foreach ($opts[0] as $variable) {
-        if ($variable === "") continue;
-        $tmp = str_replace('"','',explode("=", $variable));
-        $newdata[$tmp[0]] = $tmp[1];
-    }
-
-    preg_match("/masop=\[(.*?)\]/", $data, $masop);
-    $newdata["masop"] = explode(",",$masop[1]);
-
-    preg_match("/pd=\[\];(.*);/", $data, $progs);
-    $progs = explode(";", $progs[1]);
-
-    $i = 0;
-    foreach ($progs as $prog) {
-        $tmp = explode("=", $prog);
-        $tmp2 = str_replace("[", "", $tmp[1]);
-        $tmp2 = str_replace("]", "", $tmp2);
-        $newdata["programs"][$i] = explode(",",$tmp2);
-        $i++;
-    }
-    
-    $simminutes=0;
-    $simt=strtotime($newdata["mm"]."/".$newdata["dd"]."/".$newdata["yy"]);
-    $simdate=date(DATE_RSS,$simt);
-    $simday = ($simt/3600/24)>>0;
-    $match=array(0,0);
-    $st_array=array($newdata["nboards"]*8);
-    $pid_array=array($newdata["nboards"]*8);
-    $et_array=array($newdata["nboards"]*8);
-    for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
-        $st_array[$sid]=0;$pid_array[$sid]=0;$et_array[$sid]=0;
-    }
-    do {
-        $busy=0;
-        $match_found=0;
-        for($pid=0;$pid<$newdata["nprogs"];$pid++) {
-          $prog=$newdata["programs"][$pid];
-          if(check_match($prog,$simminutes,$simdate,$simday,$newdata)) {
-            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
-              $bid=$sid>>3;$s=$sid%8;
-              if($newdata["mas"]==($sid+1)) continue; // skip master station
-              if($prog[7+$bid]&(1<<$s)) {
-                $et_array[$sid]=$prog[6]*$newdata["wl"]/100>>0;$pid_array[$sid]=$pid+1;
-                $match_found=1;
-              }
-            }
-          }
-        }
-        if($match_found) {
-          $acctime=$simminutes*60;
-          if($newdata["seq"]) {
-            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
-              if($et_array[$sid]) {
-                $st_array[$sid]=$acctime;$acctime+=$et_array[$sid];
-                $et_array[$sid]=$acctime;$acctime+=$newdata["sdt"];
-                $busy=1;
-              }
-            }
-          } else {
-            for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {
-              if($et_array[$sid]) {
-                $st_array[$sid]=$simminutes*60;
-                $et_array[$sid]=$simminutes*60+$et_array[$sid];
-                $busy=1;
-              }
-            }
-          }
-        }
-        if ($busy) {
-          $endminutes=run_sched($simminutes*60,$st_array,$pid_array,$et_array,$newdata,$simt)/60>>0;
-          if($newdata["seq"]&&$simminutes!=$endminutes) $simminutes=$endminutes;
-          else $simminutes++;
-          for($sid=0;$sid<$newdata["nboards"]*8;$sid++) {$st_array[$sid]=0;$pid_array[$sid]=0;$et_array[$sid]=0;}
-        } else {
-          $simminutes++;
-        }
-    } while($simminutes<24*60);
-}
-
 function get_preview() {
     process_programs($_REQUEST["m"],$_REQUEST["d"],$_REQUEST["y"]);
 }
@@ -494,13 +400,6 @@ function time_to_text($sid,$start,$pid,$end,$data,$simt) {
     $class = "program-".(($pid+3)%4);
     if (($data["settings"]["rd"]!=0)&&($simt+$start+($data["settings"]["tz"]-48)*900<=$data["settings"]["rdst"])) $class="delayed";
     echo "{'start': ".$start.",'end': ".$end.",'className':'".$class."','content':'P".$pid."','group':'".$data["stations"][$sid]."'},";
-}
-
-# TODO: Convert log $data structure to renderable format for timeline
-function log_to_timeline_row($sid, $start, $pid, $end, $data, $simt) {
-	$class = "log-".(($pid+3)%4);
-	if (($data["settings"]["rd"]!=0)&&($simt+$start+($data["settings"]["tz"]-48)*900<=$data["settings"]["rdst"])) $class="delayed";
-	echo "{'start': ".$start.",'end': ".$end.",'className':'".$class."','content':'P".$pid."','group':'".$data["stations"][$sid]."'},";
 }
 
 #Get OpenSprinkler options
@@ -697,6 +596,40 @@ function auto_mm_on() {
 }
 
 #Content generation functions
+
+function make_logs_with_details() {
+	// This calls out to a new web service that encodes detailed logs with following form:
+//	{
+//		'stationId':'S01',
+//		'stationName':'Apple trees',
+//		'startTime': 903430274534, // seconds since Jan 01, 1970 00:00 GMT
+//		'endTime': 903430378676,
+//		'avgPressureKPa':100,
+//		'deliveredVolumeLtrs':50,
+//		'avgTemperatureC':38.2,
+//		'avgHumidityPc':35
+//	}
+
+//	JSON stored in window.log_details
+	echo "[{stationId:'S01',
+		stationName:'Apple trees',
+		startTime:1378153800000,
+		endTime:1378157400000,
+		avgPressureKPa:100,
+		deliveredVolumeLtrs:50,
+		avgTemperatureC:38.2,
+		avgHumidityPc:35},
+		{stationId:'S02',
+		stationName:'Plum trees',
+		startTime:1378157400000,
+		endTime:1378161000000,
+		avgPressureKPa:90,
+		deliveredVolumeLtrs:60,
+		avgTemperatureC:35.2,
+		avgHumidityPc:45}]";
+	 
+}
+
 function make_list_logs() {
     #Adapted from the script written by David B. Gustavson, 20121021
     global $log_file;
